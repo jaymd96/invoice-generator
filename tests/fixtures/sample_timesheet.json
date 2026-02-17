@@ -1,0 +1,40 @@
+{
+  "employee_name": "Jane Developer",
+  "employee_id": "EMP-042",
+  "employee_team": "Engineering",
+  "period_start": "2025-01-06",
+  "period_end": "2025-01-17",
+  "title": "Engineering Timesheet",
+  "entries": [
+    {
+      "date": "2025-01-06",
+      "description": "API endpoint implementation",
+      "project": "Project Alpha",
+      "hours": 8.0
+    },
+    {
+      "date": "2025-01-07",
+      "description": "Unit test coverage",
+      "project": "Project Alpha",
+      "hours": 7.5
+    },
+    {
+      "date": "2025-01-08",
+      "description": "Code review and documentation",
+      "project": "Project Beta",
+      "hours": 6.0
+    },
+    {
+      "date": "2025-01-09",
+      "description": "Bug fixes and deployment",
+      "project": "Project Alpha",
+      "hours": 8.0
+    },
+    {
+      "date": "2025-01-10",
+      "description": "Sprint planning and retro",
+      "project": "Project Beta",
+      "hours": 4.0
+    }
+  ]
+}

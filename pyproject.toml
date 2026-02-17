@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "invoice-generator"
+version = "2.0.0"
+description = "Professional invoice and timesheet generation CLI"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "James" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Accounting",
+]
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+pdf = ["playwright>=1.40.0"]
+dev = ["pytest>=7.0.0"]
+
+[project.scripts]
+invoicegen = "invoice_generator.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jaymd96/invoice-generator"
+Repository = "https://github.com/jaymd96/invoice-generator"
+
+[tool.hatch.build.targets.wheel]
+packages = ["invoice_generator"]

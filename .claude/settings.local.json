@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "WebFetch(domain:www.gov.uk)",
+      "WebSearch",
+      "Bash(find:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(invoicegen --help:*)",
+      "Bash(invoicegen client list:*)",
+      "Bash(invoicegen client show:*)",
+      "Bash(git commit:*)",
+      "Bash(hatch build:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

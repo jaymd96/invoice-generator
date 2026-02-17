@@ -1,0 +1,16 @@
+name: Acme Corp
+company: Acme Corp
+contact: Jane Smith
+email: billing@example.com
+address:
+  - "123 Business Street"
+  - "London, UK"
+currency: GBP
+currency_symbol: "\xA3"
+daily_rate: 500.00
+payment_terms_days: 30
+payment_details:
+  Bank: Example Bank
+  IBAN: GB00EXAMPLE000000000
+  BIC: EXAMPLEGB2L
+  Reference: Please use invoice number

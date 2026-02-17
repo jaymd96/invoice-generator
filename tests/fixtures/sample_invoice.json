@@ -1,0 +1,39 @@
+{
+  "invoice_number": "TEST-001",
+  "invoice_date": "2025-01-15",
+  "due_date": "2025-02-14",
+  "supply_date": "January 2025",
+  "company_name": "Test Company Ltd",
+  "company_email": "billing@testcompany.com",
+  "company_address": ["123 Test Street", "Dublin, Ireland"],
+  "company_number": "12345678",
+  "company_vat": "IE1234567T",
+  "customer_name": "Acme Corp",
+  "customer_address": ["456 Client Ave", "London, UK"],
+  "currency": "EUR",
+  "currency_symbol": "\u20ac",
+  "items": [
+    {
+      "description": "Development work - Week 1",
+      "quantity": 5,
+      "unit_price": 815.00,
+      "total": 4075.00
+    },
+    {
+      "description": "Development work - Week 2",
+      "quantity": 4,
+      "unit_price": 815.00,
+      "total": 3260.00
+    }
+  ],
+  "subtotal": 7335.00,
+  "tax": 0,
+  "total": 7335.00,
+  "payment_details": {
+    "Bank": "Test Bank",
+    "IBAN": "IE00TEST000000000000",
+    "BIC": "TESTIE2D",
+    "Reference": "Please use invoice number"
+  },
+  "notes": "Reverse charge: VAT to be accounted for by the recipient."
+}
