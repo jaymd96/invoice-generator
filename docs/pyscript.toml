@@ -1,0 +1,5 @@
+[files]
+"./py/bridge.py" = "./bridge.py"
+"./py/invoice.py" = "./invoice.py"
+"./py/timesheet.py" = "./timesheet.py"
+"./py/templates.py" = "./templates.py"
