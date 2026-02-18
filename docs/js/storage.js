@@ -141,7 +141,76 @@ const timesheets = {
 };
 
 // ---------------------------------------------------------------------------
+// Backup: Export / Import all data
+// ---------------------------------------------------------------------------
+
+async function exportAll() {
+  const [allClients, allCompany, allInvoices, allTimesheets] = await Promise.all([
+    getAll(STORES.clients),
+    getAll(STORES.company),
+    getAll(STORES.invoices),
+    getAll(STORES.timesheets),
+  ]);
+
+  const payload = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    clients: allClients,
+    company: allCompany,
+    invoices: allInvoices,
+    timesheets: allTimesheets,
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `invoice-generator-backup-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importAll(jsonObj) {
+  const requiredKeys = ['clients', 'company', 'invoices', 'timesheets'];
+  for (const key of requiredKeys) {
+    if (!Array.isArray(jsonObj[key])) {
+      throw new Error(`Invalid backup: missing or invalid "${key}" array`);
+    }
+  }
+
+  const database = await openDB();
+  const storeNames = [STORES.clients, STORES.company, STORES.invoices, STORES.timesheets];
+  const t = database.transaction(storeNames, 'readwrite');
+
+  const clearAndPut = (storeName, records) => {
+    const store = t.objectStore(storeName);
+    store.clear();
+    for (const record of records) {
+      store.put(record);
+    }
+  };
+
+  clearAndPut(STORES.clients, jsonObj.clients);
+  clearAndPut(STORES.company, jsonObj.company);
+  clearAndPut(STORES.invoices, jsonObj.invoices);
+  clearAndPut(STORES.timesheets, jsonObj.timesheets);
+
+  await new Promise((resolve, reject) => {
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+
+  return {
+    clients: jsonObj.clients.length,
+    invoices: jsonObj.invoices.length,
+    timesheets: jsonObj.timesheets.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
 
-window.db = { clients, company, invoices, timesheets, openDB };
+window.db = { clients, company, invoices, timesheets, openDB, exportAll, importAll };

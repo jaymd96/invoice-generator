@@ -913,7 +913,58 @@ async function renderSettings() {
         <button type="submit" class="btn btn-primary">Save Settings</button>
       </div>
     </form>
+
+    <div class="section-card" style="margin-top: 24px;">
+      <h3>Import &amp; Export</h3>
+      <p style="margin-bottom: 12px; opacity: 0.7; font-size: 0.9em;">
+        Export a full backup of all your data (clients, invoices, timesheets, settings) as a JSON file, or import a previous backup.
+      </p>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <button class="btn btn-primary" id="export-data-btn">Export Data</button>
+        <button class="btn btn-secondary" id="import-data-btn">Import Data</button>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+      </div>
+      <p style="margin-top: 10px; color: var(--danger, #e74c3c); font-size: 0.85em;">
+        Importing will replace all existing data.
+      </p>
+    </div>
   `;
+
+  // Export handler
+  $('#export-data-btn').addEventListener('click', async () => {
+    try {
+      await db.exportAll();
+      showToast('Backup exported');
+    } catch (err) {
+      console.error('Export error:', err);
+      showToast('Export failed: ' + err.message, 'error');
+    }
+  });
+
+  // Import handler
+  const importFileInput = $('#import-file-input');
+  $('#import-data-btn').addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!confirm('This will replace all existing data. Continue?')) {
+      importFileInput.value = '';
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const jsonObj = JSON.parse(text);
+      const counts = await db.importAll(jsonObj);
+      showToast(`Imported ${counts.clients} clients, ${counts.invoices} invoices, ${counts.timesheets} timesheets`);
+      renderSettings();
+    } catch (err) {
+      console.error('Import error:', err);
+      showToast('Import failed: ' + err.message, 'error');
+    }
+    importFileInput.value = '';
+  });
 
   $('#settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
