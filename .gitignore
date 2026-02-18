@@ -16,3 +16,6 @@ venv/
 # Client data - only track the example client
 clients/*
 !clients/example/
+
+# Seed / backup data (contains real client info)
+data/
