@@ -398,10 +398,27 @@ async function renderInvoices() {
 
   main.querySelectorAll('[data-view-invoice]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
-      const id = Number(e.target.getAttribute('data-view-invoice'));
+      const id = Number(e.currentTarget.getAttribute('data-view-invoice'));
       const inv = await db.invoices.get(id);
-      if (inv && inv.html) {
-        showPreview(inv.html, `Invoice-${inv.invoice_number}.pdf`, inv.invoice_number, inv.customer_email, inv.customer_name);
+      if (!inv) return;
+
+      let html = inv.html;
+
+      // Regenerate HTML if missing but source data is available
+      if (!html && inv.data && pyReady && window.pyGenerateInvoice) {
+        try {
+          html = window.pyGenerateInvoice(JSON.stringify(inv.data));
+          inv.html = html;
+          await db.invoices.save(inv);
+        } catch (err) {
+          console.error('Failed to regenerate invoice HTML:', err);
+        }
+      }
+
+      if (html) {
+        showPreview(html, `Invoice-${inv.invoice_number}.pdf`, inv.invoice_number, inv.customer_email, inv.customer_name);
+      } else {
+        showToast('Invoice preview not available. Re-create this invoice to generate a preview.', 'error');
       }
     });
   });
@@ -620,6 +637,7 @@ async function previewInvoice(clientList, companySettings) {
       currency_symbol: data.currency_symbol,
       total: subtotal.toFixed(2),
       html: html,
+      data: data,
       created_at: new Date().toISOString(),
     });
 
