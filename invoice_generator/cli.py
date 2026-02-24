@@ -12,6 +12,7 @@ from .invoice import InvoiceGenerator
 from .timesheet import TimesheetGenerator, VALID_VIEWS, VALID_HEADER_LAYOUTS, validate_data
 from .pdf import PDFConverter
 from .client import load_client, init_client, list_clients
+from .holidays import UKCalendar, VALID_DIVISIONS
 
 
 def _read_json(path: str) -> dict:
@@ -170,6 +171,115 @@ def cmd_client(args):
             sys.exit(1)
 
 
+def _make_calendar(args) -> UKCalendar:
+    """Create a UKCalendar from CLI args."""
+    division = getattr(args, 'division', None)
+    return UKCalendar(division)
+
+
+def cmd_calendar_holidays(args):
+    """Handle `invoicegen calendar holidays`"""
+    from datetime import date as d
+    cal = _make_calendar(args)
+
+    if args.year:
+        holidays = cal.get_holidays(args.year)
+    else:
+        start = d.fromisoformat(args.from_date)
+        end = d.fromisoformat(args.to_date)
+        holidays = cal.get_holidays_in_range(start, end)
+
+    if not holidays:
+        print("No public holidays found.")
+        return
+
+    for h in holidays:
+        day_name = h.date.strftime("%A")
+        notes = f" ({h.notes})" if h.notes else ""
+        print(f"  {h.date}  {day_name:<10} {h.name}{notes}")
+
+
+def cmd_calendar_check(args):
+    """Handle `invoicegen calendar check`"""
+    from datetime import date as d
+    cal = _make_calendar(args)
+    target = d.fromisoformat(args.date)
+
+    day_name = target.strftime("%A")
+    holiday = cal.is_public_holiday(target)
+    working = cal.is_working_day(target)
+
+    print(f"Date:          {target} ({day_name})")
+    print(f"Working day:   {'Yes' if working else 'No'}")
+    if holiday:
+        print(f"Holiday:       {holiday.name}")
+    elif cal.is_weekend(target):
+        print(f"Weekend:       Yes")
+
+
+def cmd_calendar_working_days(args):
+    """Handle `invoicegen calendar working-days`"""
+    from datetime import date as d
+    cal = _make_calendar(args)
+    start = d.fromisoformat(args.from_date)
+    end = d.fromisoformat(args.to_date)
+
+    count = cal.working_days_in_range(start, end)
+    holidays = cal.get_holidays_in_range(start, end)
+    holiday_weekdays = sum(
+        1 for h in holidays
+        if h.date.weekday() < 5
+    )
+
+    print(f"Period:           {start} to {end}")
+    print(f"Working days:     {count}")
+    print(f"Public holidays:  {len(holidays)} ({holiday_weekdays} on weekdays)")
+
+    if args.list:
+        print(f"\nWorking days:")
+        for wd in cal.working_days_list(start, end):
+            print(f"  {wd} ({wd.strftime('%A')})")
+
+
+def cmd_calendar_month(args):
+    """Handle `invoicegen calendar month`"""
+    cal = _make_calendar(args)
+    summary = cal.month_summary(args.year, args.month)
+
+    from datetime import date as d
+    month_name = d(args.year, args.month, 1).strftime("%B %Y")
+    print(f"Month:            {month_name}")
+    print(f"Total days:       {summary['total_days']}")
+    print(f"Working days:     {summary['working_days']}")
+    print(f"Weekend days:     {summary['weekends']}")
+    print(f"Public holidays:  {summary['public_holidays']}"
+          f" ({summary['holiday_weekday_count']} on weekdays)")
+
+    if summary['holidays']:
+        print(f"\nHolidays:")
+        for h in summary['holidays']:
+            print(f"  {h.date}  {h.name}")
+
+
+def cmd_calendar_next(args):
+    """Handle `invoicegen calendar next-working-day`"""
+    from datetime import date as d
+    cal = _make_calendar(args)
+    target = d.fromisoformat(args.date)
+    result = cal.next_working_day(target)
+    print(f"Next working day after {target}: {result} ({result.strftime('%A')})")
+
+
+def cmd_calendar_add(args):
+    """Handle `invoicegen calendar add-working-days`"""
+    from datetime import date as d
+    cal = _make_calendar(args)
+    start = d.fromisoformat(args.date)
+    result = cal.add_working_days(start, args.days)
+    direction = "after" if args.days >= 0 else "before"
+    print(f"{abs(args.days)} working days {direction} {start}: {result} ({result.strftime('%A')})")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog='invoicegen',
@@ -225,6 +335,49 @@ def main():
     p_cs.add_argument('name', help='Client identifier')
 
     p_client.set_defaults(func=cmd_client)
+
+    # --- calendar ---
+    p_cal = subparsers.add_parser('calendar', help='UK calendar and working day utilities')
+    p_cal.add_argument('--division', choices=VALID_DIVISIONS,
+                       help='UK division (default: england-and-wales)')
+    cal_sub = p_cal.add_subparsers(dest='calendar_action', help='Calendar action')
+
+    # calendar holidays
+    p_ch = cal_sub.add_parser('holidays', help='List public holidays')
+    p_ch_group = p_ch.add_mutually_exclusive_group(required=True)
+    p_ch_group.add_argument('--year', type=int, help='Year to list holidays for')
+    p_ch_group.add_argument('--from', dest='from_date', help='Start date (YYYY-MM-DD)')
+    p_ch.add_argument('--to', dest='to_date', help='End date (YYYY-MM-DD, required with --from)')
+    p_ch.set_defaults(func=cmd_calendar_holidays)
+
+    # calendar check
+    p_cc = cal_sub.add_parser('check', help='Check if a date is a working day')
+    p_cc.add_argument('date', help='Date to check (YYYY-MM-DD)')
+    p_cc.set_defaults(func=cmd_calendar_check)
+
+    # calendar working-days
+    p_cw = cal_sub.add_parser('working-days', help='Count working days in a range')
+    p_cw.add_argument('from_date', metavar='from', help='Start date (YYYY-MM-DD)')
+    p_cw.add_argument('to_date', metavar='to', help='End date (YYYY-MM-DD)')
+    p_cw.add_argument('--list', action='store_true', help='List each working day')
+    p_cw.set_defaults(func=cmd_calendar_working_days)
+
+    # calendar month
+    p_cm = cal_sub.add_parser('month', help='Monthly summary of working days')
+    p_cm.add_argument('year', type=int, help='Year')
+    p_cm.add_argument('month', type=int, choices=range(1, 13), help='Month (1-12)')
+    p_cm.set_defaults(func=cmd_calendar_month)
+
+    # calendar next-working-day
+    p_cn = cal_sub.add_parser('next-working-day', help='Find next working day after a date')
+    p_cn.add_argument('date', help='Date (YYYY-MM-DD)')
+    p_cn.set_defaults(func=cmd_calendar_next)
+
+    # calendar add-working-days
+    p_ca = cal_sub.add_parser('add-working-days', help='Add N working days to a date')
+    p_ca.add_argument('date', help='Start date (YYYY-MM-DD)')
+    p_ca.add_argument('days', type=int, help='Working days to add (negative to subtract)')
+    p_ca.set_defaults(func=cmd_calendar_add)
 
     args = parser.parse_args()
     if not args.command:
