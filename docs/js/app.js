@@ -67,6 +67,7 @@ const routes = {
   '#invoices/new': renderInvoiceForm,
   '#timesheets': renderTimesheets,
   '#timesheets/new': renderTimesheetForm,
+  '#calendar': renderCalendar,
   '#settings': renderSettings,
 };
 
@@ -881,6 +882,287 @@ async function previewTimesheet(companySettings) {
     console.error('Timesheet generation error:', err);
     showToast('Failed to generate timesheet: ' + err.message, 'error');
   }
+}
+
+// ---------------------------------------------------------------------------
+// View: Calendar (UK Bank Holidays & Working Days)
+// ---------------------------------------------------------------------------
+
+let _bankHolidaysCache = null;
+
+async function fetchBankHolidays() {
+  if (_bankHolidaysCache) return _bankHolidaysCache;
+  const resp = await fetch('https://www.gov.uk/bank-holidays.json');
+  if (!resp.ok) throw new Error(`Failed to fetch bank holidays: ${resp.status}`);
+  _bankHolidaysCache = await resp.json();
+  return _bankHolidaysCache;
+}
+
+function isWeekend(d) {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+function isWorkingDay(d, holidaySet) {
+  if (isWeekend(d)) return false;
+  const key = d.toISOString().split('T')[0];
+  return !holidaySet.has(key);
+}
+
+function workingDaysInRange(startStr, endStr, holidaySet) {
+  const start = new Date(startStr + 'T00:00:00');
+  const end = new Date(endStr + 'T00:00:00');
+  if (start > end) return { working: 0, holidays: 0 };
+  let working = 0;
+  let holidays = 0;
+  const d = new Date(start);
+  while (d <= end) {
+    if (!isWeekend(d)) {
+      const key = d.toISOString().split('T')[0];
+      if (holidaySet.has(key)) {
+        holidays++;
+      } else {
+        working++;
+      }
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return { working, holidays };
+}
+
+function monthSummary(year, month, events) {
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const total = last.getDate();
+
+  const monthHolidays = events.filter((e) => {
+    const d = new Date(e.date + 'T00:00:00');
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+
+  const holidayDates = new Set(monthHolidays.map((e) => e.date));
+
+  let weekends = 0;
+  let holidayWeekdays = 0;
+  for (let i = 1; i <= total; i++) {
+    const d = new Date(year, month, i);
+    if (isWeekend(d)) {
+      weekends++;
+    } else if (holidayDates.has(d.toISOString().split('T')[0])) {
+      holidayWeekdays++;
+    }
+  }
+
+  const working = total - weekends - holidayWeekdays;
+
+  return {
+    total,
+    working,
+    weekends,
+    holidayWeekdays,
+    holidays: monthHolidays,
+  };
+}
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const DIVISION_LABELS = {
+  'england-and-wales': 'England & Wales',
+  'scotland': 'Scotland',
+  'northern-ireland': 'Northern Ireland',
+};
+
+async function renderCalendar() {
+  const main = $('#main-content');
+  const currentYear = new Date().getFullYear();
+
+  main.innerHTML = `
+    <div class="view-header">
+      <h2>UK Calendar</h2>
+    </div>
+
+    <div class="calendar-controls">
+      <div class="form-group">
+        <label>Year</label>
+        <select id="cal-year">
+          ${[currentYear - 1, currentYear, currentYear + 1, currentYear + 2].map(
+            (y) => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Division</label>
+        <select id="cal-division">
+          <option value="england-and-wales" selected>England &amp; Wales</option>
+          <option value="scotland">Scotland</option>
+          <option value="northern-ireland">Northern Ireland</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="cal-loading" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+      Loading bank holidays...
+    </div>
+    <div id="cal-content" style="display: none;"></div>
+  `;
+
+  let data;
+  try {
+    data = await fetchBankHolidays();
+  } catch (err) {
+    $('#cal-loading').textContent = 'Failed to load bank holidays. Check your connection and try again.';
+    console.error('Bank holidays fetch error:', err);
+    return;
+  }
+
+  function update() {
+    const year = parseInt($('#cal-year').value);
+    const division = $('#cal-division').value;
+    const divData = data[division] || {};
+    const events = divData.events || [];
+
+    let totalWorking = 0;
+    let totalWeekends = 0;
+    let totalHolidayWeekdays = 0;
+    let totalDays = 0;
+
+    const rows = MONTH_NAMES.map((name, i) => {
+      const ms = monthSummary(year, i, events);
+      totalWorking += ms.working;
+      totalWeekends += ms.weekends;
+      totalHolidayWeekdays += ms.holidayWeekdays;
+      totalDays += ms.total;
+
+      const holidayTags = ms.holidays
+        .map((h) => `<span class="holiday-tag">${escapeHTML(h.title)}</span>`)
+        .join(' ');
+
+      return `
+        <tr>
+          <td>${name}</td>
+          <td style="text-align:center">${ms.working}</td>
+          <td style="text-align:center">${ms.weekends}</td>
+          <td style="text-align:center">${ms.holidayWeekdays}</td>
+          <td>${holidayTags || '<span style="color:var(--text-secondary)">—</span>'}</td>
+        </tr>`;
+    }).join('');
+
+    // Build holiday set for working days calculator
+    const yearEvents = events.filter((e) => e.date.startsWith(String(year)));
+    const holidaySet = new Set(yearEvents.map((e) => e.date));
+
+    const calContent = $('#cal-content');
+    calContent.style.display = '';
+    $('#cal-loading').style.display = 'none';
+
+    calContent.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value">${totalWorking}</div>
+          <div class="stat-label">Working Days</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${totalWeekends}</div>
+          <div class="stat-label">Weekend Days</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${totalHolidayWeekdays}</div>
+          <div class="stat-label">Bank Holidays (Weekdays)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${totalDays}</div>
+          <div class="stat-label">Total Days</div>
+        </div>
+      </div>
+
+      <div class="section-card" style="margin-bottom: 24px;">
+        <h3>Monthly Breakdown — ${year} (${escapeHTML(DIVISION_LABELS[division] || division)})</h3>
+        <table class="data-table" style="margin-top: 12px;">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th style="text-align:center">Working Days</th>
+              <th style="text-align:center">Weekends</th>
+              <th style="text-align:center">Bank Holidays</th>
+              <th>Holiday Names</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td style="text-align:center">${totalWorking}</td>
+              <td style="text-align:center">${totalWeekends}</td>
+              <td style="text-align:center">${totalHolidayWeekdays}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="section-card">
+        <h3>Working Days Calculator</h3>
+        <div class="calendar-controls" style="margin-bottom: 12px; margin-top: 12px;">
+          <div class="form-group">
+            <label>From</label>
+            <input type="date" id="calc-from" value="${year}-01-01">
+          </div>
+          <div class="form-group">
+            <label>To</label>
+            <input type="date" id="calc-to" value="${year}-12-31">
+          </div>
+          <div class="form-group" style="align-self: flex-end;">
+            <button class="btn btn-primary" id="calc-btn">Calculate</button>
+          </div>
+        </div>
+        <div id="calc-result"></div>
+      </div>
+    `;
+
+    // Calculator uses all events (not just the selected year) for full coverage
+    const allHolidaySet = new Set(events.map((e) => e.date));
+
+    $('#calc-btn').addEventListener('click', () => {
+      const from = $('#calc-from').value;
+      const to = $('#calc-to').value;
+      if (!from || !to) {
+        $('#calc-result').innerHTML = '<p style="color: var(--danger);">Please select both dates.</p>';
+        return;
+      }
+      if (from > to) {
+        $('#calc-result').innerHTML = '<p style="color: var(--danger);">From date must be before To date.</p>';
+        return;
+      }
+      const result = workingDaysInRange(from, to, allHolidaySet);
+      const holidaysInRange = events.filter((e) => e.date >= from && e.date <= to && !isWeekend(new Date(e.date + 'T00:00:00')));
+      const holidayList = holidaysInRange.length > 0
+        ? holidaysInRange.map((h) => `<span class="holiday-tag">${escapeHTML(h.title)} (${h.date})</span>`).join(' ')
+        : '';
+
+      $('#calc-result').innerHTML = `
+        <div class="stats-grid" style="margin-top: 12px;">
+          <div class="stat-card">
+            <div class="stat-value">${result.working}</div>
+            <div class="stat-label">Working Days</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${result.holidays}</div>
+            <div class="stat-label">Bank Holidays (Weekdays)</div>
+          </div>
+        </div>
+        ${holidayList ? `<div style="margin-top: 12px;">${holidayList}</div>` : ''}
+      `;
+    });
+  }
+
+  update();
+  $('#cal-year').addEventListener('change', update);
+  $('#cal-division').addEventListener('change', update);
 }
 
 // ---------------------------------------------------------------------------

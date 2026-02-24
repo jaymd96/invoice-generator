@@ -616,6 +616,35 @@ h3.full-width {
   }
 }
 
+/* --- Calendar --- */
+
+.calendar-controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.calendar-controls .form-group {
+  min-width: 160px;
+}
+
+.holiday-tag {
+  display: inline-block;
+  background-color: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin: 1px 2px;
+  white-space: nowrap;
+}
+
+.data-table tfoot td {
+  font-weight: 600;
+}
+
 /* --- Print --- */
 
 @media print {
